@@ -29,6 +29,7 @@ export type FileState = {
   key: string; // used to identify the file in the progress callback
   preview: string;
   progress: 'PENDING' | 'COMPLETE' | 'ERROR' | number;
+  cid?: string;
 };
 
 type InputProps = {

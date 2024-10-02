@@ -109,11 +109,13 @@ model Project {
 
 model Media {
   id          String    @id @default(auto()) @map("_id") @db.ObjectId
-  url         String
+  cid         String
+  previewCid  String?
   type        MediaType
   width       Int
   height      Int
   description String?
+  narration   String?
   transition  String    @default("fade")
   duration    Int       @default(5)
   createdAt   DateTime  @default(now())
@@ -125,7 +127,7 @@ model Narration {
   id         String   @id @default(auto()) @map("_id") @db.ObjectId
   transcript String
   voice      String   @default("echo")
-  audioUrl   String?
+  audioCid   String?
   createdAt  DateTime @default(now())
   projectId  String   @db.ObjectId
   project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)

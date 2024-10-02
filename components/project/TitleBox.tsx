@@ -1,21 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { ProjectType } from '#/types';
 import { useDebounceCallback } from 'usehooks-ts'
 import { useMutation } from '@tanstack/react-query';
 import { renameProject } from '#/lib/actions/mutations';
+import { useProject } from '#/components/contexts/ProjectContext';
 
-interface TitleBoxProps {
-	initialData: ProjectType;
-};
-
-const TitleBox = ({
-	initialData
-}: TitleBoxProps) => {
-	const [value, setValue] = useState(initialData.title);
+const TitleBox = () => {
+	const { project, setProject } = useProject();
+	const [value, setValue] = useState(project.title);
 	const { mutate: renameProjectMutation } = useMutation({
-		mutationKey: [`project-${initialData.id}`],
+		mutationKey: [`project-${project.id}`],
 		mutationFn: async ({ id, title }: { id: string, title: string }) => {
 			try {
 				const project = await renameProject({ id, title });
@@ -24,6 +19,9 @@ const TitleBox = ({
 			} catch (error) {
 				throw error;
 			}
+		},
+		onSuccess: (data) => {
+			setProject({ title: data.title });
 		}
 	});
 
@@ -33,7 +31,7 @@ const TitleBox = ({
 		setValue(value);
 		if (!value.trim()) return;
 
-		const data = { id: initialData.id, title: value };
+		const data = { id: project.id, title: value };
 		
 		debouncedRename(data);
 	};

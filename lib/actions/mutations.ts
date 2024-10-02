@@ -5,6 +5,7 @@ import { MediaMetadata } from '#/types';
 import { Prisma } from '@prisma/client';
 import { areArraysEqual } from '#/lib/utils';
 import { edgestoreBackendClient } from '#/lib/edgestoreServer';
+import pinata from '../pinata';
 
 export const createProject = async (data: Prisma.ProjectCreateInput) => {
   const project = await prisma.project.create({ data });
@@ -16,9 +17,9 @@ export const saveMedia = async ({
 	projectId,
 	mediaMetadata
 }: { projectId: string; mediaMetadata: MediaMetadata[] }) => {
-	const data = mediaMetadata.map(({ url, type, width, height }) => {
+	const data = mediaMetadata.map(({ cid, type, width, height }) => {
 		return {
-			url,
+			cid,
 			type,
 			width,
 			height,
@@ -26,13 +27,8 @@ export const saveMedia = async ({
 		}
 	});
 	
-	// Save media files & confirm their URLs
-	await Promise.all([
-		prisma.media.createMany({ data }),
-		...data.map(async ({ url }) => {
-      await edgestoreBackendClient.projectFiles.confirmUpload({ url });
-    })
-	]);
+	// Save media files
+	await prisma.media.createMany({ data });
 
 	// Fetch current project's mediaOrder & all media
 	const [project, allMedia, narration] = await Promise.all([
@@ -49,8 +45,8 @@ export const saveMedia = async ({
   };
 
 	// Extract IDs of newly added media
-  const newMediaIds = data.map(({ url }) => {
-    const media = allMedia.find($ => $.url === url);
+  const newMediaIds = data.map(({ cid }) => {
+    const media = allMedia.find($ => $.cid === cid);
     return media?.id;
   }).filter(id => id !== undefined) as string[];
 
@@ -117,7 +113,7 @@ export const deleteMedia = async ({ projectId, mediaId }: { projectId: string; m
 	const updatedMediaOrder = project.mediaOrder.filter(id => id !== mediaId);
 
 	await Promise.all([
-    edgestoreBackendClient.projectFiles.deleteFile({ url: media.url }),
+    pinata.files.delete([media.cid]),
 		prisma.media.delete({ where: { id: mediaId } }),
 		prisma.project.update({ where: { id: projectId }, data: { mediaOrder: updatedMediaOrder } })
   ]);
@@ -147,7 +143,7 @@ export const saveMediaOrder = async ({
 };
 
 export const deleteProject = async (id: string) => {
-	// TODO: Get all media URLs from the project & delete from Edgestore...
+	// TODO: Get all media URLs from the project & delete from Pinata...
 
   await prisma.project.delete({ where: { id } });
 };
@@ -239,12 +235,8 @@ export const updateNarration = async (projectId: string, data: Prisma.NarrationU
     throw new Error('Project not found!');
   }
 
-	if (!narration) {
-		throw new Error('Narration not found!');
-	}
-
 	// Ensure non-allowed fields are not changed
-	const allowedFields = ['transcript', 'audioUrl'] as (keyof Prisma.NarrationUpdateInput)[];
+	const allowedFields = ['transcript', 'audioCid'] as (keyof Prisma.NarrationUpdateInput)[];
 
 	for (const field in data) {
 		if (!allowedFields.includes(field as keyof Prisma.NarrationUpdateInput)) {
@@ -252,10 +244,13 @@ export const updateNarration = async (projectId: string, data: Prisma.NarrationU
 		}
 	}
 
-	const updatedNarration = await prisma.narration.update({
-		where: { projectId },
-		data
-	});
+	let updatedNarration: Prisma.NarrationGetPayload<true>;
+
+	if (narration) {
+		updatedNarration = await prisma.narration.update({ where: { projectId }, data });
+	} else {
+		updatedNarration = await prisma.narration.create({ data: { transcript: `${data.transcript}`, projectId: project.id } });
+	}
 
 	return updatedNarration;
 };

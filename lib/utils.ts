@@ -1,6 +1,6 @@
-import { OutputQuality } from '#/types';
 import { twMerge } from 'tailwind-merge';
 import { type ClassValue, clsx } from 'clsx';
+import { OutputQuality, TimeUnit } from '#/types';
 
 export const cn = (...inputs: ClassValue[]) => {
 	return twMerge(clsx(inputs));
@@ -280,6 +280,16 @@ export const reorderByField = <T>(items: T[], sortedIds: any[], field: keyof T):
   return sortedIds.map(id => itemMap[id as unknown as string]).filter(Boolean);
 };
 
+export const updateItemById = <T extends { id: string }>(array: T[], id: string, newData: Partial<T>): T[] => {
+  return array.map(item => {
+    if (item.id === id) {
+      return { ...item, ...newData };
+    }
+
+    return item;
+  });
+};
+
 export const voices = [
   { id: 'echo', src: '/voices/echo', text: 'Echo' },
   { id: 'alloy', src: '/voices/alloy', text: 'Alloy' },
@@ -312,6 +322,22 @@ export const wordsInSeconds = (seconds: number, wordsPerMinute = 182) => {
   const wordsPerSecond = wordsPerMinute / 60;
 
   return Math.floor(seconds * wordsPerSecond);
+};
+
+export const readingTimeInSeconds = (text: string, wordsPerMinute = 182, bufferPercentage = 0.05) => {
+  const words = text.split(/\s+/).length;
+  const wordsPerSecond = wordsPerMinute / 60;
+  const readingTime = words / wordsPerSecond;
+  
+  const bufferTime = readingTime * bufferPercentage;
+  
+  return Math.ceil(readingTime + bufferTime);
+};
+
+export const secondsToWords = (seconds: number, wordsPerMinute = 182) => {
+	const wordsPerSecond = wordsPerMinute / 60;
+
+	return Math.ceil(seconds * wordsPerSecond);
 };
 
 export const getOutputDimensions = (quality: OutputQuality, aspectRatio: string): [number, number] => {
@@ -352,4 +378,29 @@ export const getEncodingOptions = (outputQuality: OutputQuality) => {
     preset: outputQuality === '4K' ? 'slow' : 'medium',
     crf: outputQuality === '4K' ? '18' : '23'
   };
+};
+
+export const parseDuration = (duration: `${number} ${TimeUnit}`): number => {
+  const timeUnits: { [key: number]: TimeUnit[] } = {
+    1: ['s', 'sec', 'seconds'],
+    60: ['m', 'min', 'minutes'],
+    3600: ['h', 'hour', 'hours'],
+    86400: ['d', 'day', 'days'],
+    604800: ['w', 'week', 'weeks'],
+    2592000: ['m', 'month', 'months'],
+    31536000: ['y', 'year', 'years']
+  };
+
+  const match = duration.match(/(\d+)\s*([a-zA-Z]+)/);
+  if (!match) throw new Error('Invalid duration format');
+
+  const [_, value, unit] = match;
+
+  const unitValue = Object.keys(timeUnits).find(key =>
+    timeUnits[+key].includes(unit as TimeUnit)
+  );
+
+  if (!unitValue) throw new Error(`Invalid time unit: ${unit}`);
+
+  return parseInt(value) * parseInt(unitValue);
 };

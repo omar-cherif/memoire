@@ -4,20 +4,15 @@ import { useState } from 'react';
 import { ActivePane } from '#/types';
 import Sidebar from '#/components/project/Sidebar';
 import VideoPreview from '#/components/VideoPreview';
-import NoSSRWrapper from '#/components/NoSSRWrapper';
 import MediaPane from '#/components/project/panes/MediaPane';
 import MusicPane from '#/components/project/panes/MusicPane';
+import { useProject } from '#/components/contexts/ProjectContext';
 import SettingsPane from '#/components/project/panes/SettingsPane';
 import SubtitlePane from '#/components/project/panes/SubtitlePane';
 import NarrationPane from '#/components/project/panes/NarrationPane';
 
-interface ProjectEditorProps {
-	projectId: string;
-};
-
-const ProjectEditor = ({
-	projectId
-}: ProjectEditorProps) => {
+const ProjectEditor = () => {
+	const { project } = useProject();
 	const [activePane, setActivePane] = useState<ActivePane>('media');
 
 	const onPaneChange = (pane: ActivePane) => {
@@ -31,12 +26,10 @@ const ProjectEditor = ({
 				onPaneChange={onPaneChange}
 			/>
 			<MediaPane
-				projectId={projectId}
 				activePane={activePane}
 				onPaneChange={onPaneChange}
-				/>
+			/>
 			<NarrationPane
-				projectId={projectId}
 				activePane={activePane}
 				onPaneChange={onPaneChange}
 			/>
@@ -49,14 +42,13 @@ const ProjectEditor = ({
 				onPaneChange={onPaneChange}
 			/>
 			<SettingsPane
-				projectId={projectId}
+				projectId={project.id}
 				activePane={activePane}
 				onPaneChange={onPaneChange}
 			/>
 			<main className='bg-muted flex-1 overflow-hidden relative'>
-				<NoSSRWrapper>
-					<VideoPreview projectId={projectId} />
-				</NoSSRWrapper>
+				<VideoPreview />
+				{/* <CanvasVideoPreview /> */}
 			</main>
 		</div>
 	)

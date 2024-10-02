@@ -7,19 +7,20 @@ import { Label } from '#/components/ui/label';
 import { Input } from '#/components/ui/input';
 import { useSortable } from '@dnd-kit/sortable';
 import { Button } from '#/components/ui/button';
+import PinataImage from '#/components/PinataImage';
 import { cn, placeholderImage } from '#/lib/utils';
 import { Textarea } from '#/components/ui/textarea';
 import { deleteMedia } from '#/lib/actions/mutations';
 import { useCompletion } from '#/hooks/useCompletion';
 import { MediaItemType, TransitionType } from '#/types';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
+import { useProject } from '#/components/contexts/ProjectContext';
 import TransitionPicker from '#/components/project/TransitionPicker';
+import { ChangeEvent, FormEvent, memo, useEffect, useState } from 'react';
 import { useIsMutating, useMutation, useQueryClient } from '@tanstack/react-query';
 import { GripVerticalIcon, ImageIcon, Loader, SparklesIcon, SquareIcon, Trash2Icon, VideoIcon } from 'lucide-react';
 
 interface MediaItemProps {
-	projectId: string;
 	media: MediaItemType;
 	onMediaDelete: (id: string) => void;
 	mediaNumber: string;
@@ -29,7 +30,6 @@ interface MediaItemProps {
 };
 
 const MediaItem = ({
-	projectId,
 	media,
 	onMediaDelete,
 	mediaNumber,
@@ -37,8 +37,9 @@ const MediaItem = ({
 	handleDescriptionChange,
 	handleTransitionChange
 }: MediaItemProps) => {
+	const { project } = useProject();
 	const isMediaMutating = Boolean(useIsMutating({
-		mutationKey: [`project-${projectId}`],
+		mutationKey: [`project-${project.id}`],
 		exact: true
 	}));
 	const queryClient = useQueryClient();
@@ -48,10 +49,10 @@ const MediaItem = ({
 	const style = { transition, transform: CSS.Transform.toString(transform) };
 
 	const { mutate: deleteMediaMutation, isPending: isDeleting } = useMutation({
-		mutationKey: [`project-${projectId}`],
+		mutationKey: [`project-${project.id}`],
 		mutationFn: async (mediaId: string) => {
 			try {
-				await deleteMedia({ projectId, mediaId });
+				await deleteMedia({ projectId: project.id, mediaId });
 			} catch (error) {
 				throw error;
 			}
@@ -66,7 +67,7 @@ const MediaItem = ({
 	const { completion, input, setInput, trigger, isLoading, stop } = useCompletion({
 		api: '/api/generate',
 		initialInput: media.description ?? '',
-		body: { url: media.url, type: media.type, description },
+		body: { cid: media.cid, type: media.type, description },
     onResponse: (res) => {
       if (res.status === 429) {
         toast.error(`You've been rate limited! Please try again later.`);
@@ -74,6 +75,10 @@ const MediaItem = ({
     },
 		onFinish(_, completion) {
 			handleDescriptionChange(completion);
+
+			if (completion.length === 0) {
+				toast.error('Generation failed! Try with a different image');
+			}
 		}
 	});
 
@@ -81,6 +86,7 @@ const MediaItem = ({
 		if (completion) {
 			setInput(completion.trim());
 		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [completion]);
 
 	const handleInputChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
@@ -131,26 +137,26 @@ const MediaItem = ({
 						{/* TODO: Generate media (both image & video) thumbnail */}
 						{/* TODO: Open media in popup onClick */}
 						{media.type === 'PHOTO'
-							? <Image
-									src={media.url} placeholder={placeholderImage}
+							? <PinataImage
+									cid={media.cid} placeholder={placeholderImage}
 									width={media.width * 0.15} height={media.height * 0.15} alt='...'
-									className={cn('w-16 h-auto object-cover rounded-md cursor-pointer select-none', isDeleting && 'cursor-not-allowed')}
+									className={cn('!w-16 !h-auto object-cover rounded-md cursor-pointer select-none', isDeleting && 'cursor-not-allowed')}
 								/>
 							: <Image
 									src='/images/placeholder.svg'
 									width={media.width * 0.15} height={media.height * 0.15} alt='...'
-									className={cn('w-16 h-auto object-cover rounded-md cursor-pointer select-none', isDeleting && 'cursor-not-allowed')}
+									className={cn('!w-16 !h-auto object-cover rounded-md cursor-pointer select-none', isDeleting && 'cursor-not-allowed')}
 								/>
 						}
 						{/* Preload drag thumbnail */}
-						<Image alt='...' width={80} height={80} className='w-20 h-20 hidden' src={media.url} />
+						<PinataImage alt='...' width={80} height={80} className='w-20 h-20 hidden' cid={media.cid} />
 						<div className='flex flex-col flex-1 gap-y-2 mr-px'>
 							<div className='space-y-1'>
-								<Label htmlFor={`duration-${media.id}`}>Duration</Label>
+								<Label htmlFor={`duration-${media.id}`}>Duration <span className='italic text-muted-foreground'>(in seconds)</span></Label>
 								<Input
 									id={`duration-${media.id}`}
 									defaultValue={media.duration}
-									min={1}
+									min={5}
 									max={10}
 									type='number'
 									className='p-2 h-8'
@@ -202,4 +208,4 @@ const MediaItem = ({
 	)
 }
 
-export default MediaItem;
+export default memo(MediaItem);

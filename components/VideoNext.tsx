@@ -5,11 +5,36 @@ import { MediaItemType } from '#/types';
 import { Player } from '@remotion/player';
 import { db } from '#/lib/browserDatabase';
 import { getOutputDimensions } from '#/lib/utils';
-import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useProject } from '#/components/contexts/ProjectContext';
 import VideoComposition from '#/components/preview/VideoComposition';
+import { useEffect, useState, useCallback, useMemo, memo, FC } from 'react';
+
+interface MemoizedPlayerProps {
+	videoComposition: () => React.ReactNode;
+	totalDurationInFrames: number;
+	compositionWidth: number;
+	compositionHeight: number;
+	frameRate: number;
+};
+
+const MemoizedPlayer: FC<MemoizedPlayerProps> = memo(({ videoComposition, totalDurationInFrames, compositionWidth, compositionHeight, frameRate }) => {
+	return (
+		<Player
+			component={videoComposition}
+			durationInFrames={totalDurationInFrames}
+			compositionWidth={compositionWidth}
+			compositionHeight={compositionHeight}
+			fps={frameRate}
+			style={{ width: '100%' }}
+			controls
+		/>
+	);
+});
+
+MemoizedPlayer.displayName = 'MemoizedPlayer';
 
 const VideoPreview = () => {
+	const [isLoading, setIsLoading] = useState(true);
 	const [loadedAudioUrl, setLoadedAudioUrl] = useState('');
 	const { project, mediaItems, narration, setNarration } = useProject();
 	const [loadedMediaItems, setLoadedMediaItems] = useState<(MediaItemType & { url: string })[]>([]);
@@ -22,30 +47,31 @@ const VideoPreview = () => {
 
 	const getMediaUrl = useCallback(async (cid: string, projectId: string, type: 'media' | 'audio'): Promise<string> => {
 		try {
+
 			if (typeof window === 'undefined') {
 				return '';
 			}
-	
+
 			const table = type === 'media' ? db.media : db.audio;
 			let item = await table.where({ cid }).first();
 			if (item) {
 				return URL.createObjectURL(item.file);
 			}
-	
+
 			const response = await fetch(`/api/getFile?cid=${encodeURIComponent(cid)}`);
 			if (!response.ok) {
 				throw new Error(`HTTP error! status: ${response.status}`);
 			}
-	
+
 			const blob = await response.blob();
-	
+
 			// Use upsert instead of add
 			await table.put({
 				cid,
 				file: blob,
 				projectId
 			});
-	
+
 			return URL.createObjectURL(blob);
 		} catch (error) {
 			console.log(`Get Media Error [${type.toUpperCase()}]:>>`, error);
@@ -59,11 +85,11 @@ const VideoPreview = () => {
 			setLoadedAudioUrl(audioUrl);
 			setNarration({ audioUrl });
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [narration?.audioCid, project.id, getMediaUrl]);
+	}, [narration?.audioCid, project.id, getMediaUrl, setNarration]);
 
-	const loadMediaItems = useMemo(() => async () => {
+	const loadMediaItems = useCallback(async () => {
 		try {
+			setIsLoading(true);
 			const loadedItems = await Promise.all(
 				mediaItems.map(async (media) => ({
 					...media,
@@ -75,29 +101,23 @@ const VideoPreview = () => {
 				project.mediaOrder.indexOf(first.id) - project.mediaOrder.indexOf(next.id)
 			);
 
-			// Compare sortedMediaItems with loadedMediaItems
-			const hasChanged = loadedMediaItems.length === 0 ||
-				sortedMediaItems.length !== loadedMediaItems.length ||
-				sortedMediaItems.some((item, index) => {
-					const loadedItem = loadedMediaItems[index];
-					return !loadedItem ||
-						item.duration !== loadedItem.duration ||
-						item.transition !== loadedItem.transition;
-				});
-
-			if (hasChanged) {
-				setLoadedMediaItems(sortedMediaItems);
-			}
-
+			setLoadedMediaItems(sortedMediaItems);
 			await loadAudio();
 		} catch (error) {
 			console.error('Error loading media items :>>', error);
+		} finally {
+			setIsLoading(false);
 		}
-	}, [mediaItems, loadedMediaItems, getMediaUrl, project.id, project.mediaOrder, loadAudio]);
+	}, [mediaItems, getMediaUrl, project.id, project.mediaOrder, loadAudio]);
 
 	useEffect(() => {
 		loadMediaItems();
-	}, [loadMediaItems, mediaItems]);
+	}, [loadMediaItems]);
+
+	const totalDurationInFrames = useMemo(() => {
+		const totalDurationInSeconds = loadedMediaItems.reduce((total, item) => total + item.duration, 0);
+		return Math.round(totalDurationInSeconds * project.frameRate);
+	}, [loadedMediaItems, project.frameRate]);
 
 	const videoComposition = useCallback(() => {
 		return VideoComposition({
@@ -105,14 +125,6 @@ const VideoPreview = () => {
 			mediaItems: loadedMediaItems
 		});
 	}, [loadedAudioUrl, loadedMediaItems]);
-
-	const totalDurationInFrames = useMemo(() => {
-		const totalDurationInSeconds = loadedMediaItems.reduce((total, item) => total + item.duration, 0);
-		return Math.round(totalDurationInSeconds * project.frameRate);
-	}, [loadedMediaItems, project.frameRate]);
-
-	console.log('Total duration in frames:', totalDurationInFrames);
-	console.log('Total duration in seconds:', totalDurationInFrames / project.frameRate);
 
 	if (mediaItems.length === 0) {
 		return (
@@ -141,7 +153,7 @@ const VideoPreview = () => {
 		)
 	}
 
-	if (loadedMediaItems.length !== mediaItems.length) {
+	if (isLoading) {
 		return (
 			<div className='w-full h-full flex flex-col'>
 				<div className='flex flex-col items-center justify-center h-svh gap-y-4'>
@@ -165,20 +177,18 @@ const VideoPreview = () => {
 					<p className='text-muted-foreground text-sm'>Your preview will be ready shortly</p>
 				</div>
 			</div>
-		)
+		);
 	}
 
 	return (
 		<div className='w-full h-full flex flex-col bg-muted relative'>
 			<div className='absolute inset-0 m-auto max-h-full max-w-full' style={{ aspectRatio: `${compositionWidth} / ${compositionHeight}` }}>
-				<Player
-					component={videoComposition}
-					durationInFrames={totalDurationInFrames}
+				<MemoizedPlayer
+					videoComposition={videoComposition}
+					totalDurationInFrames={totalDurationInFrames}
 					compositionWidth={compositionWidth}
 					compositionHeight={compositionHeight}
-					fps={project.frameRate}
-					style={{ width: '100%' }}
-					controls
+					frameRate={project.frameRate}
 				/>
 			</div>
 		</div>

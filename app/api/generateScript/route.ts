@@ -48,101 +48,96 @@ export const POST = async (req: NextRequest, res: NextResponse) => {
 		return new Response('One or more media descriptions are missing!', { status: 400 });
 	}
 
-	const formattedMedia = media.map($ => {
-		return {
-			id: $.id,
-			type: $.type,
-			description: $.description,
-			duration: $.duration,
-      scriptWordCount: wordsInSeconds($.duration, 182)
-		}
-	});
-  
-  const totalSeconds = media.reduce((total, item) => total + item.duration, 0);
-	
-  const model = google('models/gemini-1.5-pro-latest', {
-		safetySettings: [
-			{
-				category: 'HARM_CATEGORY_HARASSMENT',
-				threshold: 'BLOCK_NONE'
-			},
-			{
-				category: 'HARM_CATEGORY_HATE_SPEECH',
-				threshold: 'BLOCK_NONE'
-			},
-			{
-				category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-				threshold: 'BLOCK_NONE'
-			},
-			{
-				category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-				threshold: 'BLOCK_NONE'
-			}
-		]
+	const formattedMedia = media.map(($, idx) => {
+		return `${idx + 1}.
+    ID: ${$.id}
+    Type: ${$.type}
+    Description: ${$.description}
+    Narration Word Count: ${wordsInSeconds($.duration, 182)}`;
 	});
 
-	const prompt = `You are an event video scriptwriter.
-Please draft a script that chronologically narrates a series of photos and videos from an event, based on a provided description of the event & an array of media items (containing the ID, the type of media, the duration it's narration should be, the description of the media, and the EXACT word count of the script you'll generate for the media).
+  const model = google('models/gemini-1.5-flash-latest', {
+    safetySettings: [
+      {
+        category: 'HARM_CATEGORY_HARASSMENT',
+        threshold: 'BLOCK_NONE'
+      },
+      {
+        category: 'HARM_CATEGORY_HATE_SPEECH',
+        threshold: 'BLOCK_NONE'
+      },
+      {
+        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+        threshold: 'BLOCK_NONE'
+      },
+      {
+        category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+        threshold: 'BLOCK_NONE'
+      }
+    ]
+  });
+
+  const prompt = `You are a professional video scriptwriter tasked with creating a cohesive narrative for a series of photos and videos. Your goal is to craft a story that flows naturally while adhering to strict word count limits for each media item.
 
 Instructions:
-1. Narrate each item using details like place, date, time, and description in a story format, using first-person and past tense.
-2. The script should mimic a casual storytelling session, as if explaining the trip to friends or family.
-3. Infer logical placements for media items lacking complete information, ensuring continuity and context without guessing.
-4. Use short, clear sentences to maintain engagement and clarity in each scene's narration.
-5. Ensure the narration covers all items once, with each & every media narrations tailored to meet their word count requirement.
-6. Let the narration of ALL medias combined be EXACTLY ${wordsInSeconds(totalSeconds, 182)} words.
+1. Create a narrative that chronologically describes the media items using first-person past tense.
+2. Adopt a casual, conversational tone as if sharing the experience with friends.
+3. Ensure continuity between items without inventing details not present in the descriptions.
+4. Use concise, engaging language to maintain interest and clarity.
+5. Strictly adhere to the specified word count for each media item's narration.
+6. Do not mention the media type (photo/video) in your narrations.
+7. If the project description is vague, infer the project's theme from the media descriptions.
+8. Craft the narrative to flow smoothly from one item to the next, creating a cohesive story.
+9. Maintain the exact order of media items as provided in the input. Do not rearrange or omit any items.
 
-Output JSON only in the format like in the example below:
+Output JSON in the following format:
 
 {
-  "title": "Our Grand Canyon Adventure",
-  "description": "Join us on our unforgettable road trip to the Grand Canyon, as we explore stunning landscapes and experience the beauty of one of the world's natural wonders.",
-  "hashtags": ["#GrandCanyon, "#Trip"],
+  "title": "Project Title",
+  "description": "A brief, engaging description of the overall project",
+  "hashtags": ["#RelevantHashtag1", "#RelevantHashtag2"],
   "mediaItems": [
     {
-      "id": "64c146bcd5e9ec007c57a17b",
-      "type": "video",
-      "text": "Hey everyone! We're hitting the road at the crack of dawn, super excited to start our adventure to the Grand Canyon. Everything's packed, and we're ready to go!"
+      "id": "unique_id_1",
+      "type": "PHOTO", // or VIDEO
+      "narration": "Concise narration within the specified word count"
     },
-    {
-      "id": "64c146bcd5e9ec007c57a17c",
-      "type": "photo",
-      "text": "Look at this view, folks! Miles of open road ahead of us. The landscapes are just stunning and the vibe in the car is just full of anticipation."
-    },
-    {
-      "id": "64c146bcd5e9ec007c57a17d",
-      "type": "video",
-      "text": "And we're here! Stepping into the Grand Canyon National Park now. I can't wait to show you all the incredible views we've been talking about."
-    },
-    {
-      "id": "64c146bcd5e9ec007c57a17e",
-      "type": "photo",
-      "text": "Here's our first stop. Just take in this breathtaking panorama of the canyon. The sheer size and beauty of it all is something you have to see to believe!"
-    },
-    {
-      "id": "64c146bcd5e9ec007c57a17f",
-      "type": "video",
-      "text": "Nothing tops this, right? Watching the sunset over the Grand Canyon. The sky's turning into a canvas of oranges, pinks, and reds. It's moments like these that make this trip unforgettable."
-    },
-    {
-      "id": "64c146bcd5e9ec007c57a170",
-      "type": "photo",
-      "text": "Ending our day around the campfire, under the stars. Sharing stories, roasting marshmallows. It's the perfect way to wrap up a perfect day. Thanks for joining us, and see you on the next adventure!"
-    }
+    // ... additional media items in the same order as provided in the input
   ]
 }
 
-Here's the project description: ${project.description}
-Here are the media items: ${formattedMedia}`;
+Project Description:
+${project.description}
+
+Media Items:
+${formattedMedia.join('\n\n')}
+
+Remember: 
+- Each narration MUST NOT exceed its specified word count. 
+- Create a flowing narrative that connects all items cohesively.
+- Preserve the exact order of media items as given in the input.`;
+
+  console.log(':>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
+  console.log('prompt :>>', prompt);
+  console.log(':>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
 
   const result = await generateObject({
     model,
 		prompt,
+    temperature: 0.5,
 		schema: NarrationGenerationSchema,
 		mode: 'json'
   });
 
-	const transcript = result.object.mediaItems.map($ => $.text).join('\n\n');
+  // console.log(':>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
+  // console.log('Result Object :>>', JSON.stringify(result.object, null, 2));
+  // console.log(':>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
+
+  const sortedMediaItems = [...result.object.mediaItems].sort((first, next) =>
+    project.mediaOrder.indexOf(first.id) - project.mediaOrder.indexOf(next.id)
+  );
+
+	const transcript = sortedMediaItems.map($ => $.narration).join('\n\n');
 
   if (narration) {
     await prisma.narration.update({ where: { id: narration.id }, data: { transcript } });

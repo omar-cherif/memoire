@@ -30,7 +30,7 @@ export const AuthSchema = z.object({
 export const NarrationMediaItem = z.object({
 	id: z.string(),
 	type: z.enum(['VIDEO', 'PHOTO']),
-	text: z.string()
+	narration: z.string()
 });
 
 export const NarrationGenerationSchema = z.object({

@@ -1,42 +1,39 @@
 import Dexie, { Table } from 'dexie';
 
-enum MediaType {
-  PHOTO,
-  VIDEO
-}
-
-interface FFmpegCore {
-  key: string;
-  value: ArrayBuffer;
-}
-
 interface Media {
-  id: string;
-  url: string;
-  type: MediaType;
+  cid: string;
+  file: Blob;
+  projectId: string;
+};
+
+interface Image {
+  cid: string;
   width: number;
   height: number;
-  description?: string;
-  transition: string;
-  duration: number;
-  createdAt: Date;
-  projectId: string;
-}
+  blob: Blob;
+};
 
-class MemoireDB extends Dexie {
-  ffmpegCore!: Table<FFmpegCore>;
+interface Audio {
+  cid: string;
+  file: Blob;
+  projectId: string;
+};
+
+class MemoireDatabase extends Dexie {
   media!: Table<Media>;
+  images!: Table<Image>;
+  audio!: Table<Audio>;
 
   constructor() {
     super('Memoire');
-    this.version(1).stores({
-      ffmpegCore: 'key', // primary key "key"
-      media: '++id, url, type, width, height, description, transition, duration, createdAt, projectId'
+    this.version(2).stores({
+      media: '++cid, file, projectId',
+      images: '[cid+width+height], blob',
+      audio: '++cid, file, projectId'
     });
   }
 }
 
-const db = new MemoireDB();
+const db = new MemoireDatabase();
 
-export type { FFmpegCore, Media };
-export { db, MediaType };
+export { db };

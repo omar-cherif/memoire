@@ -2,7 +2,7 @@
 
 import {
 	Loader,
-	DownloadIcon
+	UploadIcon
 } from 'lucide-react';
 import { Fragment } from 'react';
 import {
@@ -12,6 +12,7 @@ import {
 	DropdownMenuTrigger
 } from '#/components/ui/dropdown-menu';
 import { toast } from 'react-toastify';
+import { OutputQuality } from '#/types';
 import Logo from '#/components/project/Logo';
 import { useSession } from 'next-auth/react';
 import { Button } from '#/components/ui/button';
@@ -19,9 +20,9 @@ import UserButton from '#/components/UserButton';
 import { Skeleton } from '#/components/ui/skeleton';
 import { generateDefaultAvatar } from '#/lib/utils';
 import TitleBox from '#/components/project/TitleBox';
-import { OutputQuality, ProjectType } from '#/types';
 import { Separator } from '#/components/ui/separator';
 import { useMutationState } from '@tanstack/react-query';
+import { useProject } from '#/components/contexts/ProjectContext';
 import { StandardDefinition, HighDefinition, FourK, Video } from '@phosphor-icons/react';
 
 const dropdownItems = [
@@ -51,16 +52,11 @@ const dropdownItems = [
 	}
 ] as const;
 
-interface NavbarProps {
-	initialData: ProjectType;
-};
-
-export const Navbar = ({
-	initialData
-}: NavbarProps) => {
+const Navbar = () => {
+	const { project } = useProject();
 	const status = useMutationState({
 		filters: {
-			mutationKey: [`project-${initialData.id}`],
+			mutationKey: [`project-${project.id}`],
 			exact: true
 		},
 		select: (mutation) => mutation.state.status
@@ -80,7 +76,7 @@ export const Navbar = ({
 		<nav className='w-full flex items-center p-4 h-[4.5rem] gap-x-8 border-b'>
 			<Logo />
 			<div className='w-full flex items-center gap-x-1 h-full'>
-				<TitleBox initialData={initialData} />
+				<TitleBox />
 				<Separator orientation='vertical' className='mx-2 h-3/4' />
 				{isPending && (
 					<div className='flex items-center gap-x-2 select-none'>
@@ -119,8 +115,8 @@ export const Navbar = ({
 					<DropdownMenu modal={false}>
 						<DropdownMenuTrigger asChild>
 							<Button size='sm' className='bg-black hover:bg-core text-white'>
-								<DownloadIcon className='size-4 mr-2' />
-								Download Video
+								Export
+								<UploadIcon className='size-4 ml-2' />
 							</Button>
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align='end' className='min-w-48'>
@@ -161,3 +157,5 @@ export const Navbar = ({
 		</nav>
 	);
 };
+
+export default Navbar;

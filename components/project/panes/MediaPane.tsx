@@ -1,78 +1,58 @@
 'use client';
 
 import Image from 'next/image';
-import { toast } from 'react-toastify';
 import { Prisma } from '@prisma/client';
-import { useEdgeStore } from '#/lib/edgestore';
+import { db } from '#/lib/browserDatabase';
+import axios, { AxiosResponse } from 'axios';
+import { UPLOAD_ENDPOINT } from '#/lib/pinata';
 import { Button } from '#/components/ui/button';
 import useExitPrompt from '#/hooks/useExitPrompt';
 import { useDebounceCallback } from 'usehooks-ts';
-import { Skeleton } from '#/components/ui/skeleton';
+import { SaveIcon, StarIcon } from 'lucide-react';
+import PinataImage from '#/components/PinataImage';
+import { useMutation } from '@tanstack/react-query';
 import MediaItem from '#/components/project/MediaItem';
-import { LightbulbIcon, SaveIcon, StarIcon } from 'lucide-react';
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { ChangeEvent, useEffect, useRef, useState } from 'react';
-import { getProjectMediaAndNarration } from '#/lib/actions/queries';
+import { useProject } from '#/components/contexts/ProjectContext';
 import SidebarPaneHeader from '#/components/project/SidebarPaneHeader';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs';
 import { saveMedia, saveMediaOrder, updateMedia } from '#/lib/actions/mutations';
 import SidebarPaneCloseButton from '#/components/project/SidebarPaneCloseButton';
 import { MultiFileDropzone, type FileState } from '#/components/MultiFileDropzone';
+import { ActivePane, MediaMetadata, TransitionType, PinataUploadResponse } from '#/types';
 import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { ActivePane, MediaMetadata, MediaItemType, ProjectMediaType, TransitionType } from '#/types';
-import { cn, acceptedFileTypes, reorderByField, getPhotoDimensions, getVideoDimensions } from '#/lib/utils';
+import { cn, acceptedFileTypes, reorderByField, updateItemById, getPhotoDimensions, getVideoDimensions } from '#/lib/utils';
 import { DndContext, DragOverlay, DragEndEvent, PointerSensor, TouchSensor, closestCorners, useSensor, useSensors } from '@dnd-kit/core';
 
 const MAX_FILE_SIZE = 1024 * 1024 * 10; // 10 MB
 
 interface MediaPaneProps {
-	projectId: string;
 	activePane: ActivePane;
 	onPaneChange: (pane: ActivePane) => void;
 };
 
 const MediaPane = ({
-	projectId,
 	activePane,
 	onPaneChange
 }: MediaPaneProps) => {
-	const { edgestore } = useEdgeStore();
-	const queryClient = useQueryClient();
 	const tabBottomRef = useRef<HTMLDivElement>(null);
 	const [_, setShowExitPrompt] = useExitPrompt(false);
 	const [isSaveDisabled, setIsSaveDisabled] = useState(true);
 	const [activeId, setActiveId] = useState<string | null>(null);
 	const [fileStates, setFileStates] = useState<FileState[]>([]);
 	const [isUploadDisabled, setIsUploadDisabled] = useState(false);
-	const [mediaItems, setMediaItems] = useState<MediaItemType[]>([]);
+	const { project, setProject, mediaItems, setMediaItems } = useProject();
 	const [mediaMetadata, setMediaMetadata] = useState<MediaMetadata[]>([]);
 	const [mediaTab, setMediaTab] = useState<'upload' | 'manage'>('upload');
 
-	const { isPending: projectMediaLoading, data: projectMedia } = useQuery({
-		queryKey: ['media'],
-		queryFn: async () => {
-			try {
-				const projectMedia = await getProjectMediaAndNarration(projectId);
-
-				const reorderedMediaItems = reorderByField(projectMedia.media, projectMedia.mediaOrder, 'id');
-				
-				setMediaItems(reorderedMediaItems);
-				return projectMedia;
-			} catch (error) {
-				toast.error('Failed to load your media ;(');
-				throw error;
-			}
-		}
-	});
-
 	const { mutate: saveMediaMutation } = useMutation({
-		mutationKey: [`project-${projectId}`],
+		mutationKey: [`project-${project.id}`],
 		mutationFn: async ({ projectId, mediaMetadata }: { projectId: string; mediaMetadata: MediaMetadata[] }) => {
 			try {
-				const project = await saveMedia({ projectId, mediaMetadata });
+				const data = await saveMedia({ projectId, mediaMetadata });
 
-				return project;
+				return data;
 			} catch (error) {
 				throw error;
 			}
@@ -82,11 +62,24 @@ const MediaPane = ({
 			setShowExitPrompt(true);
 		},
 		onSuccess: async (data) => {
-			queryClient.setQueryData<ProjectMediaType>(['media'], data);
+			// Save files to IndexedDB
+			await Promise.all(fileStates.map(async (fileState) => {
+				if (fileState.cid) {
+					const blob = await fileState.file.arrayBuffer().then(buffer => new Blob([buffer]));
+					await db.media.add({
+						cid: fileState.cid,
+						file: blob,
+						projectId: project.id
+					});
+				}
+			}));
 
+			alert('Files saved to IndexedDB!');
+			
 			const reorderedMediaItems = reorderByField(data.media, data.mediaOrder, 'id');
 
 			setMediaItems(reorderedMediaItems);
+			alert('Files reordered & set!');
 
 			// Switch to manage tab
 			setMediaTab('manage');
@@ -95,6 +88,7 @@ const MediaPane = ({
 			setIsUploadDisabled(false);
 			setFileStates([]);
 			setMediaMetadata([]);
+			alert('Files upload completed!');
 		},
 		onError: () => {
 			setIsUploadDisabled(true);
@@ -102,10 +96,10 @@ const MediaPane = ({
 	});
 
 	const { mutate: updateMediaMutation } = useMutation({
-		mutationKey: [`project-${projectId}`],
+		mutationKey: [`project-${project.id}`],
 		mutationFn: async (variables: { mediaId: string; data: Prisma.MediaUpdateInput }) => {
 			try {
-				const media = await updateMedia({ projectId, ...variables });
+				const media = await updateMedia({ projectId: project.id, ...variables });
 
 				return media;
 			} catch (error) {
@@ -113,20 +107,24 @@ const MediaPane = ({
 			}
 		},
 		onSuccess: async (data) => {
-			queryClient.invalidateQueries({ queryKey: ['media'] });
+			const updatedItems = updateItemById(mediaItems, data.id, data);
+			setMediaItems(updatedItems);
 		}
 	});
 
 	const { mutate: saveMediaOrderMutation } = useMutation({
-		mutationKey: [`project-${projectId}`],
+		mutationKey: [`project-${project.id}`],
 		mutationFn: async (newMediaOrder: string[]) => {
 			try {
-				const media = await saveMediaOrder({ projectId, newMediaOrder });
+				await saveMediaOrder({ projectId: project.id, newMediaOrder });
 
-				return media;
+				return newMediaOrder;
 			} catch (error) {
 				throw error;
 			}
+		},
+		onSuccess: async (newMediaOrder) => {
+			setProject({ mediaOrder: newMediaOrder });
 		}
 	});
 
@@ -180,7 +178,7 @@ const MediaPane = ({
 			if (!confirm(message)) return;
 		}
 
-		saveMediaMutation({ projectId, mediaMetadata });
+		saveMediaMutation({ projectId: project.id, mediaMetadata });
 	};
 
 	const onClose = () => {
@@ -227,7 +225,7 @@ const MediaPane = ({
 	};
 
 	const onMediaDelete = (id: string) => {
-		setMediaItems(items => items.filter(item => item.id !== id));
+		setMediaItems(mediaItems.filter(item => item.id !== id));
 	};
 
 	const completedFiles = fileStates.filter(({ progress }) => typeof progress === 'number' && progress === 100 || progress === 'COMPLETE');
@@ -235,7 +233,7 @@ const MediaPane = ({
 	return (
 		<aside
 			className={cn(
-				'bg-white relative border-r z-20 w-[360px] h-full flex flex-col',
+				'bg-white relative border-r z-20 w-full xs:w-[360px] h-full flex flex-col',
 				activePane === 'media' ? 'visible' : 'hidden'
 			)}
 		>
@@ -263,25 +261,39 @@ const MediaPane = ({
 								await Promise.all(
 									addedFiles.map(async (addedFileState) => {
 										try {
-											const fileResponse = await edgestore.projectFiles.upload({
-												file: addedFileState.file,
-												options: { temporary: true },
-												onProgressChange: async (progress) => {
-													updateFileProgress(addedFileState.key, progress);
-													if (progress === 100) {
-														// wait 1 second to set it to complete
-														// so that the user can see the progress bar
-														await new Promise(resolve => setTimeout(resolve, 1000));
-														updateFileProgress(addedFileState.key, 'COMPLETE');
+											const keyRequest = await fetch('/api/key');
+											const keyData = await keyRequest.json() as { JWT: string };
+
+											const formData = new FormData();
+											formData.append(`file`, addedFileState.file);
+
+											const { data: uploadResponse }: AxiosResponse<{ data: PinataUploadResponse }> = await axios.post(UPLOAD_ENDPOINT, formData, {
+												headers: {
+													Authorization: `Bearer ${keyData.JWT}`
+												},
+												onUploadProgress: async (progressEvent) => {
+													if (progressEvent.total) {
+														const percentComplete = (progressEvent.loaded / progressEvent.total) * 100;
+														// console.log(`Upload progress: ${percentComplete.toFixed(2)}%`);
+														updateFileProgress(addedFileState.key, percentComplete);
 													}
 												}
 											});
 
+											// console.log('Pinata Upload Response :>>', uploadResponse.data);
+
+											await new Promise(resolve => setTimeout(resolve, 1000));
+											updateFileProgress(addedFileState.key, 'COMPLETE');
+
 											const data = addedFileState.type === 'PHOTO'
 												? await getPhotoDimensions(addedFileState.preview)
 												: await getVideoDimensions(addedFileState.preview);
-											const metadata = { ...data, url: fileResponse.url, type: addedFileState.type };
+											
+											const metadata = { ...data, cid: uploadResponse.data.cid, type: addedFileState.type };
 											setMediaMetadata(mediaMetadata => [...mediaMetadata, metadata]);
+											setFileStates(previousStates => previousStates.map(state =>
+												state.key === addedFileState.key ? { ...state, cid: uploadResponse.data.cid } : state
+											));
 										} catch (error) {
 											updateFileProgress(addedFileState.key, 'ERROR');
 										}
@@ -316,16 +328,8 @@ const MediaPane = ({
 					</TabsContent>
 					<TabsContent value='manage' className='mt-0'>
 						<div className='w-full'>
-							{/* Loading state */}
-							{projectMediaLoading && [...Array(5)].map((_, idx) => (
-								<div key={idx} className='flex flex-1 items-center justify-between py-3.5 border-b font-medium'>
-									<Skeleton className='w-6 h-6 rounded mr-2' />
-									<Skeleton className='flex-1 h-6 rounded' />
-								</div>
-							))}
-
 							{/* Tip */}
-							{!projectMediaLoading && mediaItems.length > 0 && (
+							{mediaItems.length > 0 && (
 								<div className='bg-core border-l-4 border-primary/20 p-2.5 mt-3 rounded-lg relative overflow-hidden'>
 									<StarIcon className='h-36 w-36 text-white absolute right-2 -top-9 z-0 stroke-1 opacity-20' />
 									<p className='text-sm font-bold text-white'>Pro Tip</p>
@@ -349,7 +353,6 @@ const MediaPane = ({
 										strategy={verticalListSortingStrategy}
 									>
 										<MediaItem
-											projectId={projectId}
 											media={media}
 											onMediaDelete={onMediaDelete}
 											mediaNumber={`${idx + 1}`.padStart(`${array.length}`.length, '0')}
@@ -362,19 +365,19 @@ const MediaPane = ({
 
 								<DragOverlay>
 									{activeId ? (
-										<Image
+										<PinataImage
 											alt='...'
 											width={80}
 											height={80}
 											className='w-20 h-20 object-cover rounded-md cursor-grabbing shadow-md'
-											src={mediaItems.find($ => $.id === activeId)?.url || '/images/placeholder.svg'}
+											cid={mediaItems.find($ => $.id === activeId)?.cid || (mediaItems.find($ => $.id === activeId)?.previewCid ?? '')}
 										/>
 									) : null}
 								</DragOverlay>
 							</DndContext>
 
 							{/* Empty state */}
-							{projectMedia && projectMedia.media.length === 0 && (
+							{mediaItems.length === 0 && (
 								<div className='h-72 flex flex-col items-center justify-center gap-y-2'>
 									<Image
 										src='/images/empty-state-dark.svg'

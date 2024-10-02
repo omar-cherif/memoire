@@ -36,7 +36,7 @@ export const GET = async (req: NextRequest, res: NextResponse) => {
 	const [project, media, narration] = await Promise.all([
     prisma.project.findUnique({ where: { id: projectId, userId: token.sub } }),
     prisma.media.findMany({ where: { projectId } }),
-    prisma.narration.findUnique({ where: { projectId }, select: { transcript: true, audioUrl: true, voice: true } })
+    prisma.narration.findUnique({ where: { projectId }, select: { transcript: true, audioCid: true, voice: true } })
   ]);
 
   if (!project) {
@@ -45,7 +45,7 @@ export const GET = async (req: NextRequest, res: NextResponse) => {
   if (!narration) {
 		return new Response('Narration not found!', { status: 400 });
 	}
-  if (!narration.audioUrl) {
+  if (!narration.audioCid) {
 		return new Response('Narration audio not found!', { status: 400 });
 	}
   if (media.length === 0) {
@@ -65,7 +65,7 @@ export const GET = async (req: NextRequest, res: NextResponse) => {
   const [outputWidth, outputHeight] = getOutputDimensions(outputQuality, aspectRatio);
 
   for (const media of mediaItems) {
-    streampot.input(media.url);
+    streampot.input(media.cid);
     streampot.addInputOptions(['-loop', '1', '-t', media.duration.toString()]);
 
     const currentStream = `v${filterIndex}`;
@@ -93,7 +93,7 @@ export const GET = async (req: NextRequest, res: NextResponse) => {
   const encodingOptions = getEncodingOptions(outputQuality);
 
   try {
-    streampot.input(narration.audioUrl);
+    streampot.input(narration.audioCid);
     streampot.audioCodec('aac');
     streampot.audioBitrate(encodingOptions.audioBitrate);
     streampot.videoCodec(encodingOptions.videoCodec);

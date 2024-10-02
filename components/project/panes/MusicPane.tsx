@@ -22,7 +22,7 @@ const MusicPane = ({
 	return (
 		<aside
 			className={cn(
-				'bg-white relative border-r z-20 w-[360px] h-full flex flex-col',
+				'bg-white relative border-r z-20 w-full xs:w-[360px] h-full flex flex-col',
 				activePane === 'music' ? 'visible' : 'hidden'
 			)}
 		>

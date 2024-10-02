@@ -1,6 +1,8 @@
+import pinata from '#/lib/pinata';
 import { Redis } from '@upstash/redis';
 import { google } from '@ai-sdk/google';
 import { getToken } from 'next-auth/jwt';
+import { setCacheConfig } from '#/lib/cache';
 import { Ratelimit } from '@upstash/ratelimit';
 import { type CoreMessage, streamText } from 'ai';
 import { NextRequest, NextResponse } from 'next/server';
@@ -10,6 +12,8 @@ const ratelimit = new Ratelimit({
   redis: Redis.fromEnv(),
   limiter: Ratelimit.slidingWindow(10, '60 s')
 });
+
+setCacheConfig('generateMediaDescription', { max: 1000, ttl: 1000 * 60 * 60 }); // 1000 items, 1 hour TTL
 
 export const POST = async (req: NextRequest, res: NextResponse) => {
 	const token = await getToken({ req });
@@ -22,7 +26,8 @@ export const POST = async (req: NextRequest, res: NextResponse) => {
     return new Response('Rate limited!', { status: 429 });
   }
 
-  const { prompt, url, type, } = await req.json();
+  const { prompt, cid, type, } = await req.json();
+  const url = await pinata.gateways.createSignedURL({ cid, expires: 600 });
 	const context = prompt.length > 0
 		? `Here's a brief description of the image from the user:
 		---------------------------------------------------------

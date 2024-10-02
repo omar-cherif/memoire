@@ -8,7 +8,7 @@ const SidebarPaneHeader = ({
 	description
 }: SidebarPaneHeaderProps) => {
 	return (
-		<div className='p-3 border-b space-y-1 h-[4.75rem]'>
+		<div className='p-3 border-b space-y-1 xs:h-[4.75rem]'>
 			<p className='text-base font-medium'>
 				{title}
 			</p>

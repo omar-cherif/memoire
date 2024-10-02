@@ -15,25 +15,6 @@ export const getProjectsByUserId = async (userId: string, isStarred: boolean) =>
 	return projects;
 };
 
-export const getProjectByProjectAndUserId = async (userId: string, projectId: string) => {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId, userId }
-  });
-
-  return project;
-};
-
-export const getProjectSettingsById = async (projectId: string) => {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { description: true, aspectRatio: true, frameRate: true }
-  });
-
-	if (!project) throw new Error('Project not found!');
-
-  return project;
-};
-
 export const getProjectTitle = async (projectId: string) => {
   const project = await prisma.project.findUnique({
     where: { id: projectId }
@@ -42,16 +23,4 @@ export const getProjectTitle = async (projectId: string) => {
 	if (!project) return null;
 
   return project.title;
-};
-
-export const getProjectMediaAndNarration = async (projectId: string) => {
-	const [project, media, narration] = await Promise.all([
-    prisma.project.findUnique({ where: { id: projectId }, select: { mediaOrder: true, previewUrl: true } }),
-    prisma.media.findMany({ where: { projectId } }),
-    prisma.narration.findUnique({ where: { projectId }, select: { transcript: true, audioUrl: true, voice: true } })
-  ]);
-
-	if (!project) throw new Error('Project not found!');
-
-  return { media, mediaOrder: project.mediaOrder, narration, previewUrl: project.previewUrl };
 };

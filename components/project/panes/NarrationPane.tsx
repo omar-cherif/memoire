@@ -2,77 +2,58 @@
 
 import { toast } from 'react-toastify';
 import { Prisma } from '@prisma/client';
-import { cn, voices } from '#/lib/utils';
 import { Label } from '#/components/ui/label';
 import { Button } from '#/components/ui/button';
 import { useDebounceCallback } from 'usehooks-ts';
 import { Textarea } from '#/components/ui/textarea';
-import { Skeleton } from '#/components/ui/skeleton';
+import { useMutation } from '@tanstack/react-query';
+import { useCompletion } from '#/hooks/useCompletion';
 import usePreviousValue from '#/hooks/usePreviousValue';
 import { updateNarration } from '#/lib/actions/mutations';
 import { ActivePane, NarrationType, Voice } from '#/types';
-import { useMutation, useQuery } from '@tanstack/react-query';
 import { NarrationGenerationSchema } from '#/lib/validations';
-import { getProjectMediaAndNarration } from '#/lib/actions/queries';
+import { cn, readingTimeInSeconds, voices } from '#/lib/utils';
+import { useProject } from '#/components/contexts/ProjectContext';
 import SidebarPaneHeader from '#/components/project/SidebarPaneHeader';
 import SidebarPaneCloseButton from '#/components/project/SidebarPaneCloseButton';
 import { ChangeEvent, FormEvent, MouseEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { SquareIcon, SparklesIcon, ChevronDownIcon, MicIcon, PlayIcon, PauseIcon, PodcastIcon } from 'lucide-react';
+import { SquareIcon, SparklesIcon, ChevronDownIcon, MicIcon, PlayIcon, PauseIcon, PodcastIcon, AlertTriangleIcon } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '#/components/ui/dropdown-menu';
 
 interface NarrationPaneProps {
-	projectId: string;
 	activePane: ActivePane;
 	onPaneChange: (pane: ActivePane) => void;
 };
 
 const NarrationPane = ({
-	projectId,
 	activePane,
 	onPaneChange
 }: NarrationPaneProps) => {
-	const [audioUrl, setAudioUrl] = useState('');
-	const [narration, setNarration] = useState('');
 	const [isLoading, setIsLoading] = useState(false);
 	const voiceRef = useRef<HTMLAudioElement | null>(null);
 	const [isVoiceSelectOpen, setIsVoiceSelectOpen] = useState(false);
 	const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
 	const [playingVoice, setPlayingVoice] = useState<Voice | null>(null);
-	const [selectedVoice, setSelectedVoice] = useState<Voice | null>(null);
-	const previousVoice = usePreviousValue(selectedVoice);
+	const { project, mediaItems, narration, setNarration } = useProject();
+	const [narrationValue, setNarrationValue] = useState(narration?.transcript ?? '');
 	const [fetchedVoices, setFetchedVoices] = useState<Map<string, string>>(new Map());
 	const [abortController, setAbortController] = useState<AbortController | null>(null);
-
-	const { isPending: projectNarrationLoading } = useQuery({
-		queryKey: ['narration'],
-		queryFn: async () => {
-			try {
-				const projectMedia = await getProjectMediaAndNarration(projectId);
-				
-				if (projectMedia.narration) {
-					setAudioUrl(projectMedia.narration.audioUrl ?? '');
-					setNarration(projectMedia.narration.transcript ?? '');
-					setSelectedVoice(projectMedia.narration.voice as Voice);
-				}
-
-				return projectMedia;
-			} catch (error) {
-				toast.error('Failed to load your narration ;(');
-				throw error;
-			}
-		}
-	});
+	const [selectedVoice, setSelectedVoice] = useState<Voice>(narration?.voice as Voice);
+	const previousVoice = usePreviousValue(selectedVoice);
 
 	const { mutate: updateNarrationMutation } = useMutation({
-		mutationKey: [`project-${projectId}`],
+		mutationKey: [`project-${project.id}`],
 		mutationFn: async (data: Prisma.NarrationUpdateInput) => {
 			try {
-				const project = await updateNarration(projectId, data);
+				const updatedProject = await updateNarration(project.id, data);
 
-				return project;
+				return updatedProject;
 			} catch (error) {
 				throw error;
 			}
+		},
+		onSuccess: (data) => {
+			setNarration({ transcript: data.transcript });
 		}
 	});
 
@@ -84,6 +65,26 @@ const NarrationPane = ({
 			setAbortController(null);
 		}
 	}, [abortController]);
+
+	const { completion: shortenedNarration, trigger: shorten, isLoading: isShortening, stop: stopShortening } = useCompletion({
+		api: '/api/shorten',
+		body: { projectId: project.id },
+		onResponse: (res) => {
+			if (res.status === 429) {
+				toast.error(`You've been rate limited! Please try again later.`);
+			}
+		},
+		onFinish(_, completion) {
+			setNarrationValue(completion.trim());
+			debouncedUpdateNarration({ transcript: completion.trim() });
+		}
+	});
+
+	useEffect(() => {
+		if (shortenedNarration) {
+			setNarrationValue(shortenedNarration.trim());
+		}
+	}, [shortenedNarration]);
 	
 	const onClose = () => {
 		onPaneChange(null);
@@ -99,7 +100,7 @@ const NarrationPane = ({
 		try {
 			const response = await fetch('/api/generateScript', {
 				method: 'POST',
-				body: JSON.stringify({ projectId }),
+				body: JSON.stringify({ projectId: project.id }),
 				signal: controller.signal
 			});
 
@@ -109,8 +110,8 @@ const NarrationPane = ({
 
 			const object = await response.json();
 			const data = NarrationGenerationSchema.parse(object);
-			const transcript  = data.mediaItems.map($ => $.text).join('\n\n');
-			setNarration(transcript);
+			const transcript  = data.mediaItems.map($ => $.narration).join('\n\n');
+			setNarrationValue(transcript);
 
 			console.log('Generation Data :>>', data);
 		} catch (error: any) {
@@ -133,7 +134,7 @@ const NarrationPane = ({
 		try {
 			const response = await fetch('/api/generateNarration', {
 				method: 'POST',
-				body: JSON.stringify({ projectId }),
+				body: JSON.stringify({ projectId: project.id }),
 				signal: controller.signal
 			});
 
@@ -142,7 +143,7 @@ const NarrationPane = ({
 			}
 
 			const result = await response.json() as { message: string; data: NarrationType };
-			setAudioUrl(result.data.audioUrl as string);
+			setNarration({ audioCid: result.data.audioCid });
 
 			console.log('Audio Generation Data :>>', result);
 		} catch (error: any) {
@@ -153,15 +154,17 @@ const NarrationPane = ({
 	};
 
 	const handleNarrationChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
-		if (narration) {
+		if (isShortening) return;
+
+		if (narrationValue) {
 			debouncedUpdateNarration({ transcript: e.target.value });
 		}
 
-		setNarration(e.target.value);
+		setNarrationValue(e.target.value);
 	};
 
 	const handleVoiceSelect = (voice: Voice) => {
-		if (previousVoice !== voice && narration) {
+		if (previousVoice !== voice && narrationValue) {
 			setSelectedVoice(voice);
 			debouncedUpdateNarration({ voice });
 		}
@@ -199,6 +202,7 @@ const NarrationPane = ({
 
 		return () => {
 			if (voiceRef.current) {
+				// eslint-disable-next-line react-hooks/exhaustive-deps
 				voiceRef.current.removeEventListener('ended', handleAudioEnded);
 			}
 		};
@@ -220,12 +224,19 @@ const NarrationPane = ({
 		fetchVoices();
 	}, []);
 
-	const isDisabled = projectNarrationLoading || isLoading || isGeneratingAudio;
+	const isDisabled = isLoading || isShortening || isGeneratingAudio;
+	const totalDuration = mediaItems.reduce((total, item) => total + item.duration, 0);
+	const isNarrationWarningActive = narrationValue.length > 0
+		? readingTimeInSeconds(narrationValue) > totalDuration
+		: false;
+
+	console.log('totalDuration :>>', totalDuration);
+	console.log('readingTimeInSeconds(narration) :>>', readingTimeInSeconds(narrationValue));
 
 	return (
 		<aside
 			className={cn(
-				'bg-white relative border-r z-20 w-[360px] h-full flex flex-col',
+				'bg-white relative border-r z-20 w-full xs:w-[360px] h-full flex flex-col',
 				activePane === 'narration' ? 'visible' : 'hidden'
 			)}
 		>
@@ -234,27 +245,7 @@ const NarrationPane = ({
 				description='Create, review & update the AI-generated narration.'
 			/>
 				<div className='p-3 flex-1 scrollbar-thin overflow-y-auto overflow-x-hidden'>
-					<div className={cn('flex flex-col flex-1 gap-y-2 mr-px', !projectNarrationLoading && 'hidden')}>
-						<div className='space-y-1.5 relative'>
-							<Skeleton className='w-20 mt-1 h-[18px] rounded' />
-							<Skeleton className='w-full h-40 rounded-md' />
-							<Skeleton className='w-10 h-4 rounded absolute right-0 -bottom-5' />
-						</div>
-
-						<div className='space-y-1.5'>
-							<Skeleton className='w-20 mt-1 h-[18px] rounded' />
-							<Skeleton className='w-full h-10 rounded-md' />
-						</div>
-
-						<div className='mx-auto'>
-							<Skeleton className='w-40 mt-1 h-7 rounded-md' />
-						</div>
-
-						<div className='space-y-1.5'>
-							<Skeleton className='w-full h-[54px] rounded-[54px]' />
-						</div>
-					</div>
-					<div className={cn('flex flex-col flex-1 gap-y-2 mr-px', projectNarrationLoading && 'hidden')}>
+					<div className='flex flex-col flex-1 gap-y-2 mr-px'>
 						<div className='space-y-1 relative'>
 							<Label htmlFor='transcript'>Transcript</Label>
 							<form onSubmit={handleFormSubmit} className='absolute right-0 -top-2'>
@@ -272,15 +263,37 @@ const NarrationPane = ({
 							</form>
 							<Textarea
 								id='transcript'
-								value={narration}
+								value={narrationValue}
 								onChange={handleNarrationChange}
 								maxLength={1500}
 								className='p-2 h-40 resize-none scrollbar-thin'
 								disabled={isDisabled}
-								placeholder={`Please click the button above to ${narration.length > 0 ? 're' : ''}generate your transcript`}
+								placeholder={`Please click the button above to ${narrationValue.length > 0 ? 're' : ''}generate your transcript`}
 							/>
-							<span className='text-xs text-muted-foreground absolute right-0 -bottom-5 select-none'>{narration.length}/1500</span>
+							<span className='text-xs text-muted-foreground absolute right-0 -bottom-5 select-none'>{narrationValue.length}/1500</span>
 						</div>
+
+						{/* Narration Warning */}
+						{isNarrationWarningActive && (
+							<div className='bg-yellow-500 border-l-4 border-primary/20 p-2.5 mt-3 rounded-lg relative overflow-hidden'>
+								<AlertTriangleIcon className='h-36 w-36 text-white absolute right-2 -top-9 z-0 stroke-1 opacity-20' />
+								<p className='text-sm font-bold text-white'>Warning</p>
+								<p className='mt-1 text-sm text-white'>
+									The time taken to read this narration exceeds the total duration of your project. Click the button below to shorten it.
+								</p>
+								{isShortening ? (
+									<Button size='sm' variant='outline' onClick={stopShortening} className='mt-1.5 bg-red-600 text-white border-red-600 hover:border-black text-xs w-max h-7 px-2'>
+										<SquareIcon className='size-3.5 mr-1.5' />
+										Stop shortening
+									</Button>
+								) : (
+									<Button size='sm' type='submit' onClick={() => shorten()} disabled={isDisabled} className='mt-1.5 bg-black/20 hover:bg-black text-white text-xs w-max h-7 px-2'>
+										<SparklesIcon className='size-3.5 mr-1.5' />
+										Shorten with AI
+									</Button>
+								)}
+							</div>
+						)}
 
 						<div className='space-y-1'>
 							<Label htmlFor='voice'>Voice</Label>
@@ -324,14 +337,14 @@ const NarrationPane = ({
 									Cancel generation
 								</Button>
 							) : (
-								<Button onClick={handleAudioGeneration} size='sm' disabled={isDisabled || !narration} className='bg-black hover:bg-core text-white text-xs w-max h-7 px-2'>
+								<Button onClick={handleAudioGeneration} size='sm' disabled={isDisabled || !narrationValue} className='bg-black hover:bg-core text-white text-xs w-max h-7 px-2'>
 									<PodcastIcon className='size-3.5 mr-1.5' />
 									Generate narration
 								</Button>
 							)}
 						</div>
 
-						<audio src={audioUrl} className='w-full' controls>
+						<audio src={narration?.audioUrl} className='w-full' controls>
 							Your browser does not support the audio element.
 						</audio>
 					</div>

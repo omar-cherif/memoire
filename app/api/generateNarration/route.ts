@@ -1,11 +1,11 @@
 import OpenAI from 'openai';
 import { Voice } from '#/types';
 import prisma from '#/lib/prisma';
+import pinata from '#/lib/pinata';
 import { Redis } from '@upstash/redis';
 import { getToken } from 'next-auth/jwt';
 import { Ratelimit } from '@upstash/ratelimit';
 import { NextRequest, NextResponse } from 'next/server';
-import { edgestoreBackendClient } from '#/lib/edgestoreServer';
 
 export const maxDuration = 30;
 const openai = new OpenAI();
@@ -50,17 +50,15 @@ export const POST = async (req: NextRequest, res: NextResponse) => {
 		const audioBlob = await result.blob();
 		const buffer = Buffer.from(await audioBlob.arrayBuffer());
 		const url = 'data:' + audioBlob.type + ';base64,' + buffer.toString('base64');
-		const uploadResult = await edgestoreBackendClient.projectFiles.upload({
-			content: { url, extension: 'mp3' }
-		});
+		const uploadResult = await pinata.upload.url(url);
 
-		if (narration.audioUrl) {
-			await edgestoreBackendClient.projectFiles.deleteFile({ url: narration.audioUrl });
+		if (narration.audioCid) {
+			await pinata.files.delete([narration.audioCid]);
 		}
 
 		const updatedNarration = await prisma.narration.update({
 			where: { id: narration.id },
-			data: { audioUrl: uploadResult.url }
+			data: { audioCid: uploadResult.cid }
 		});
 
 		return NextResponse.json({ message: 'Audio generated!', data: updatedNarration }, { status: 201 });

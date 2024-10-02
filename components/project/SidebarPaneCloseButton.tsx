@@ -17,7 +17,7 @@ const SidebarPaneCloseButton = ({
 		<button
 			onClick={onClick}
 			className={cn(
-				'absolute -right-[12.5px] top-1/2 transform -translate-y-1/2 flex items-center justify-center group',
+				'absolute -right-[12.5px] top-1/2 transform -translate-y-1/2 hidden xs:flex items-center justify-center group',
 				pane !== activePane && 'hidden'
 			)}
 		>
