@@ -4,15 +4,14 @@ import {
 	Loader,
 	UploadIcon
 } from 'lucide-react';
-import { Fragment } from 'react';
 import {
 	DropdownMenu,
 	DropdownMenuItem,
 	DropdownMenuContent,
 	DropdownMenuTrigger
 } from '#/components/ui/dropdown-menu';
-import { toast } from 'react-toastify';
 import { OutputQuality } from '#/types';
+import { Fragment, useState } from 'react';
 import Logo from '#/components/project/Logo';
 import { useSession } from 'next-auth/react';
 import { Button } from '#/components/ui/button';
@@ -22,6 +21,7 @@ import { generateDefaultAvatar } from '#/lib/utils';
 import TitleBox from '#/components/project/TitleBox';
 import { Separator } from '#/components/ui/separator';
 import { useMutationState } from '@tanstack/react-query';
+import ExportModal from '#/components/modals/ExportModal';
 import { useProject } from '#/components/contexts/ProjectContext';
 import { StandardDefinition, HighDefinition, FourK, Video } from '@phosphor-icons/react';
 
@@ -54,6 +54,9 @@ const dropdownItems = [
 
 const Navbar = () => {
 	const { project } = useProject();
+	const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+	const [selectedQuality, setSelectedQuality] = useState<OutputQuality | null>(null);
+	
 	const status = useMutationState({
 		filters: {
 			mutationKey: [`project-${project.id}`],
@@ -68,8 +71,8 @@ const Navbar = () => {
 	const isPending = currentStatus === 'pending';
 
 	const onQualitySelect = (quality: OutputQuality) => {
-		console.log('Quality :>>', quality);
-		toast.info('Not implemented yet ;(');
+		setSelectedQuality(quality);
+		setIsExportModalOpen(true);
 	};
 
 	return (
@@ -154,6 +157,13 @@ const Navbar = () => {
 					)}
 				</div>
 			</div>
+
+			<ExportModal
+				isOpen={isExportModalOpen}
+				onClose={() => setIsExportModalOpen(false)}
+				quality={selectedQuality}
+				projectId={project.id}
+			/>
 		</nav>
 	);
 };
