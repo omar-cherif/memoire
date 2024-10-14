@@ -3,6 +3,7 @@
 import { ReactNode } from 'react';
 import Providers from '#/app/providers';
 import { ToastContainer } from 'react-toastify';
+import { Analytics } from '@vercel/analytics/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import '#/app/fonts.css';
@@ -39,6 +40,7 @@ const RootLayout = ({ children }: { children: ReactNode }) => {
             />
             {children}
           </Providers>
+          <Analytics />
         </body>
       </html>
     </QueryClientProvider>
