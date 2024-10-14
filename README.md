@@ -1,6 +1,7 @@
 <p align="center" id="top">
 	<img height="100px" src="public/images/logo.png" alt="Memoire Logo">
 	<p align="center">🧙🏽‍♂️ Create stunning narrated videos from your photos & videos using AI.</p>
+	<p align="center">⚡ Powered by Pinata & Next.js.</p>
 </p>
 
 <div align="center">
@@ -27,19 +28,19 @@
 Memoire is an AI-powered application designed to transform your photos and videos into compelling videos with ease. Learn more about Memoire in the article below:
 
 ![Article Preview](public/images/article.png)
-> **Link**: *https://blog.omzi.dev/create-narrated-videos-with-ai-in-minutes-with-memoire*
+> **Link**: *https://link.omzi.dev/MemoirePost*
 
 ## ⚙️ **Features**
 
 - [x] Full-Featured Authentication
-- [x] Upload Media & Generate Descriptions
+- [x] Upload Media To Pinata & Generate Descriptions
 - [x] Media Transitions
 - [x] Sortable Media List
 - [x] AI Script Generation
 - [x] AI Audio Generation with Selectable Voices
 - [x] Project Settings
 - [x] Cloud Video Generation
-- [ ] Canvas-Based, In-Browser Output Generation (WIP)
+- [x] In-Browser Preview
 - [ ] AI Music Generation (WIP)
 - [ ] AI Powered Subtitle Generation (WIP)
 
@@ -48,10 +49,11 @@ Memoire is an AI-powered application designed to transform your photos and video
 - **_FrontEnd_**: TypeScript, Next.js, DND Kit
 - **_BackEnd_**: Next.js API Routes, Server Actions, Prisma
 - **_Styling_**: Tailwind CSS, shadcn/ui components
+- **_File Storage_**: Pinata
 - **_Rate Limit_**: Upstash
 - **_Authentication_**: Next Auth
 - **_AI Models_**: AI71's Falcon 140B, Google's Gemini 1.5 Pro, OpenAI's TTS-1, Meta's Music Gen, OpenAI's Whisper
-- **_Cloud Video Generation_**: StreamPot
+- **_In-Browser Preview_**: Remotion
 
 ## 🚩 **Prerequisites**
 
@@ -89,8 +91,10 @@ SENDER_NAME = # Your sender name
 DATABASE_URL = # Your database URL
 NEXTAUTH_SECRET = # Your NextAuth secret
 NEXTAUTH_URL = # Your NextAuth URL
-EDGE_STORE_ACCESS_KEY = # Your Edge Store access key
-EDGE_STORE_SECRET_KEY = # Your Edge Store secret key
+PINATA_API_KEY = # Your Pinata API key
+PINATA_API_SECRET = # Your Pinata secret key
+PINATA_JWT = # Your Pinata JWT secret
+NEXT_PUBLIC_PINATA_GATEWAY_URL = # Your Pinata gateway URL
 UPSTASH_REDIS_REST_URL = # Your Upstash Redis REST URL
 UPSTASH_REDIS_REST_TOKEN = # Your Upstash Redis REST token
 STREAMPOT_API_KEY = # Your StreamPot API key
@@ -114,7 +118,7 @@ This project is licensed under the MIT License. See the [`LICENSE`](./LICENSE) f
 
 ## ❌ **Disclaimer**
 
-Memoire is a work-in-progress. You may experience intense rate limits, errors and/or bugs while testing out the application. Feel free to reach to me on Twitter ([@0xOmzi](https://twitter.com/0xOmzi)) regarding any issue you might be facing.
+Memoire is a work-in-progress. You may experience intense rate limits, errors and/or bugs while testing out the application. Feel free to reach to me via the comments on ([this post](https://link.omzi.dev/MemoirePost)) regarding any issue you might be facing.
 
 ---
 
